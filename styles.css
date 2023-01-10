@@ -26,8 +26,8 @@ h3 {
 
 u {
     text-decoration-thickness: 1.5px;
+    /* text-decoration-color: azure; */
     text-decoration-color: azure;
-
 }
 
 nav li{
@@ -35,6 +35,13 @@ nav li{
     /* padding-bottom: 15%; */
 }
 
+.nav {
+  -moz-box-shadow: 1px 2px 3px rgba(1,1,10,.5);
+  -webkit-box-shadow: 1px 2px 3px rgba(1,1,10,.5);
+  box-shadow: 1px 2px 3px rgba(1,1,10,0.5);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  }
 
 * {
   margin: 0;
@@ -94,10 +101,13 @@ body h1.home_name{
 
 body h5.home-text{
   display: inline-block;
-  font-size: 25px;
+  font-size: 35px;
   
 }
 
+.card {
+  font-size: large;
+}
 
 .wrapper {
   display: flex;
