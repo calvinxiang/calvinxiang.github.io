@@ -22,7 +22,7 @@ body,
 }
 
 canvas {
-  touch-action: none;
+  touch-action: manipulation;
   width: 100% !important;
   height: 100% !important;
 }
@@ -126,8 +126,11 @@ canvas {
   touch-action: none;
   width: 120px;
   height: 120px;
-  padding: 20px;
-  background-color: rgba(255, 255, 255, 0.05);
+  /* Create a better isolation boundary */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  /* Make it more visible but not intrusive */
   border-radius: 50%;
 }
 
@@ -141,6 +144,9 @@ canvas {
   align-items: center;
   justify-content: center;
   border: 2px solid rgba(255, 255, 255, 0.5);
+  /* Better isolation */
+  touch-action: none;
+  pointer-events: auto;
 }
 
 .joystick-knob {
@@ -151,4 +157,7 @@ canvas {
   position: absolute;
   transition: transform 0.1s ease-out;
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+  /* To be extra safe */
+  touch-action: none;
+  pointer-events: none;
 } 
