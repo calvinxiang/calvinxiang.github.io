@@ -6,6 +6,131 @@ import * as THREE from 'three'
 import './App.css'
 import { FaGithub, FaLinkedin, FaTwitter } from 'react-icons/fa'
 
+// Mobile joystick component
+function MobileJoystick({ onMove }: { onMove: (x: number, y: number) => void }) {
+  const [active, setActive] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [startPosition, setStartPosition] = useState({ x: 0, y: 0 });
+  const joystickRef = useRef<HTMLDivElement>(null);
+  const knobRef = useRef<HTMLDivElement>(null);
+  
+  const maxDistance = 40; // Maximum distance the joystick knob can move
+  
+  const handleStart = (clientX: number, clientY: number) => {
+    if (!joystickRef.current) return;
+    
+    const rect = joystickRef.current.getBoundingClientRect();
+    setStartPosition({ 
+      x: clientX - rect.left, 
+      y: clientY - rect.top 
+    });
+    setActive(true);
+  };
+  
+  const handleMove = (clientX: number, clientY: number) => {
+    if (!active || !joystickRef.current) return;
+    
+    const rect = joystickRef.current.getBoundingClientRect();
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    
+    let deltaX = clientX - rect.left - startPosition.x;
+    let deltaY = clientY - rect.top - startPosition.y;
+    
+    // Calculate distance from center
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    
+    // Normalize if beyond max distance
+    if (distance > maxDistance) {
+      deltaX = (deltaX / distance) * maxDistance;
+      deltaY = (deltaY / distance) * maxDistance;
+    }
+    
+    // Set joystick position
+    setPosition({ 
+      x: deltaX, 
+      y: deltaY 
+    });
+    
+    // Calculate normalized values (-1 to 1)
+    const normalizedX = deltaX / maxDistance;
+    const normalizedY = deltaY / maxDistance;
+    
+    // Call the onMove callback with normalized values
+    onMove(normalizedX, normalizedY);
+  };
+  
+  const handleEnd = () => {
+    setActive(false);
+    setPosition({ x: 0, y: 0 });
+    onMove(0, 0);
+  };
+  
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      if (joystickRef.current?.contains(e.target as Node)) {
+        handleStart(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+    
+    const handleTouchMove = (e: TouchEvent) => {
+      if (active) {
+        e.preventDefault();
+        handleMove(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+    
+    const handleTouchEnd = () => {
+      handleEnd();
+    };
+    
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd);
+    
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [active]);
+  
+  return (
+    <div 
+      ref={joystickRef}
+      className="joystick-container"
+      style={{
+        position: 'absolute',
+        bottom: '50px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '120px',
+        height: '120px',
+        borderRadius: '50%',
+        backgroundColor: 'rgba(100, 100, 100, 0.5)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+        touchAction: 'none'
+      }}
+    >
+      <div 
+        ref={knobRef}
+        className="joystick-knob"
+        style={{
+          width: '50px',
+          height: '50px',
+          borderRadius: '50%',
+          backgroundColor: 'rgba(50, 50, 50, 0.8)',
+          transform: `translate(${position.x}px, ${position.y}px)`,
+          transition: active ? 'none' : 'transform 0.2s ease-out'
+        }}
+      />
+    </div>
+  );
+}
+
 function InfoPanel() {
   const [isVisible, setIsVisible] = useState(true);
 
@@ -30,6 +155,7 @@ function InfoPanel() {
             <li>WASD - Move penguin</li>
             <li>Mouse/Touch - Rotate camera</li>
             <li>Scroll/Pinch - Zoom camera</li>
+            {isMobileDevice() && <li>Joystick - Move penguin on mobile</li>}
           </ul>
         </div>
 
@@ -64,10 +190,29 @@ function InfoPanel() {
   );
 }
 
+// Helper function to detect mobile devices
+function isMobileDevice() {
+  return (
+    typeof window !== 'undefined' && 
+    (navigator.userAgent.match(/Android/i) ||
+    navigator.userAgent.match(/webOS/i) ||
+    navigator.userAgent.match(/iPhone/i) ||
+    navigator.userAgent.match(/iPad/i) ||
+    navigator.userAgent.match(/iPod/i) ||
+    navigator.userAgent.match(/BlackBerry/i) ||
+    navigator.userAgent.match(/Windows Phone/i) ||
+    (navigator.maxTouchPoints && navigator.maxTouchPoints > 2))
+  );
+}
+
+// Add the joystick movement state
+const JoystickContext = createContext<{x: number, y: number}>({ x: 0, y: 0 });
+
 function Player() {
   const [position, setPosition] = useState<[number, number, number]>([0, 1, 0])
   const [rotation, setRotation] = useState<[number, number, number]>([0, 0, 0])
   const [keysPressed, setKeysPressed] = useState<Set<string>>(new Set())
+  const joystickInput = React.useContext(JoystickContext);
   const leftFlipperRef = useRef<THREE.Mesh>(null)
   const rightFlipperRef = useRef<THREE.Mesh>(null)
   const bodyRef = useRef<THREE.Group>(null)
@@ -126,17 +271,24 @@ function Player() {
   // Optimize movement updates using useFrame
   useFrame((state, delta) => {
     // Update movement
-    if (keysPressed.size > 0) {
+    if (keysPressed.size > 0 || (joystickInput.x !== 0 || joystickInput.y !== 0)) {
       const moveDirection = new THREE.Vector3(0, 0, 0)
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
       forward.y = 0
       forward.normalize()
       const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize()
 
+      // Keyboard controls
       if (keysPressed.has('w')) moveDirection.add(forward)
       if (keysPressed.has('s')) moveDirection.sub(forward)
       if (keysPressed.has('a')) moveDirection.sub(right)
       if (keysPressed.has('d')) moveDirection.add(right)
+
+      // Joystick controls
+      if (joystickInput.x !== 0 || joystickInput.y !== 0) {
+        moveDirection.add(right.clone().multiplyScalar(joystickInput.x))
+        moveDirection.sub(forward.clone().multiplyScalar(joystickInput.y))
+      }
 
       if (moveDirection.length() > 0) {
         moveDirection.normalize()
@@ -161,7 +313,7 @@ function Player() {
     }
 
     // Update animations
-    if (keysPressed.size > 0) {
+    if (keysPressed.size > 0 || (joystickInput.x !== 0 || joystickInput.y !== 0)) {
       isMoving.current = true
       flipperAngle.current += delta * 5
       waddleAngle.current += delta * 6
@@ -2267,39 +2419,50 @@ function MapleLeafsLogo({ position, rotation, scale = 1 }: { position: [number, 
 }
 
 function App() {
+  const [joystickState, setJoystickState] = useState({ x: 0, y: 0 });
+  const isMobile = isMobileDevice();
+
+  // Handle joystick movement
+  const handleJoystickMove = (x: number, y: number) => {
+    setJoystickState({ x, y });
+  };
+
   return (
-    <div className="canvas-container">
+    <div className="App">
       <InfoPanel />
-      <Canvas
-        shadows
-        camera={{ position: [-25, 15, 25], fov: 65 }}
-        onCreated={({ gl, camera }) => {
-          gl.setClearColor('#87CEEB')
-          
-          // More aggressive renderer optimizations
-          gl.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)) // Cap pixel ratio lower
-          gl.shadowMap.type = THREE.PCFShadowMap // Use PCF instead of PCFSoft for better performance
-          gl.shadowMap.autoUpdate = false // Disable auto updates for shadows
-          gl.shadowMap.needsUpdate = true // Update once
-          
-          // Optimize camera
-          camera.near = 1
-          camera.far = 200 // Reduced from 300
-          
-          // Look at center of rink
-          camera.lookAt(0, 0, 0)
-        }}
-        // Add stronger performance options to Canvas
-        dpr={Math.min(window.devicePixelRatio, 1.5)} // Cap pixel ratio lower
-        performance={{ min: 0.5, max: 1.0 }} // Allow frame rate to drop to maintain smoothness
-        frameloop="demand" // Only render when needed
-      >
-        <Suspense fallback={null}>
-          <Scene />
-        </Suspense>
-      </Canvas>
+      <JoystickContext.Provider value={joystickState}>
+        <Canvas shadows>
+          <Physics>
+            {/* Your canvas content remains the same */}
+            <ambientLight intensity={0.35} />
+            <directionalLight
+              castShadow
+              position={[50, 50, 25]}
+              intensity={0.7}
+              shadow-mapSize-width={2048}
+              shadow-mapSize-height={2048}
+              shadow-camera-far={100}
+              shadow-camera-left={-50}
+              shadow-camera-right={50}
+              shadow-camera-top={50}
+              shadow-camera-bottom={-50}
+            />
+            <Suspense fallback={null}>
+              <Scene />
+            </Suspense>
+            <OrbitControls
+              minPolarAngle={0}
+              maxPolarAngle={Math.PI / 2 - 0.1}
+              minDistance={5}
+              maxDistance={75}
+              enablePan={false}
+            />
+          </Physics>
+        </Canvas>
+        {isMobile && <MobileJoystick onMove={handleJoystickMove} />}
+      </JoystickContext.Provider>
     </div>
-  )
+  );
 }
 
-export default App 
+export default App;
