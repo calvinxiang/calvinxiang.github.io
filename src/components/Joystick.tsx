@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 interface JoystickProps {
   onMove: (x: number, y: number) => void;
@@ -10,6 +10,7 @@ const Joystick: React.FC<JoystickProps> = ({ onMove, onStop }) => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [origin, setOrigin] = useState({ x: 0, y: 0 });
   const [isMobile, setIsMobile] = useState(false);
+  const joystickRef = useRef<HTMLDivElement>(null);
 
   // Detect mobile device
   useEffect(() => {
@@ -30,6 +31,8 @@ const Joystick: React.FC<JoystickProps> = ({ onMove, onStop }) => {
     if ('touches' in e) {
       clientX = e.touches[0].clientX;
       clientY = e.touches[0].clientY;
+      // Store the touch identifier
+      touchIdRef.current = e.touches[0].identifier;
     } else {
       clientX = e.clientX;
       clientY = e.clientY;
@@ -41,17 +44,30 @@ const Joystick: React.FC<JoystickProps> = ({ onMove, onStop }) => {
     
     setOrigin({ x: centerX, y: centerY });
     setPosition({ x: clientX, y: clientY });
+    
+    // Stop propagation to prevent camera rotation while using joystick
+    e.stopPropagation();
   }, []);
+
+  // Reference to keep track of the active touch ID
+  const touchIdRef = useRef<number | null>(null);
 
   const handleMove = useCallback((e: TouchEvent | MouseEvent) => {
     if (!active) return;
     
-    e.preventDefault();
-    
     let clientX, clientY;
+    
     if ('touches' in e) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
+      // Find our touch point
+      const touchPoint = Array.from(e.touches).find(
+        touch => touch.identifier === touchIdRef.current
+      );
+      
+      // If we lost our touch point, exit
+      if (!touchPoint) return;
+      
+      clientX = touchPoint.clientX;
+      clientY = touchPoint.clientY;
     } else {
       clientX = e.clientX;
       clientY = e.clientY;
@@ -63,9 +79,9 @@ const Joystick: React.FC<JoystickProps> = ({ onMove, onStop }) => {
     const deltaX = clientX - origin.x;
     const deltaY = clientY - origin.y;
     
-    // Limit to a circle with radius of 50px
+    // Limit to a circle with radius of 60px (increased from 50px)
     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    const maxDistance = 50;
+    const maxDistance = 60;
     
     let normX = deltaX;
     let normY = deltaY;
@@ -80,24 +96,50 @@ const Joystick: React.FC<JoystickProps> = ({ onMove, onStop }) => {
     const normalizedY = normY / maxDistance;
     
     onMove(normalizedX, normalizedY);
+    
+    // Only prevent default if it's our touch point
+    if ('touches' in e && touchIdRef.current !== null) {
+      // We'll only prevent default for this particular touch event
+      // This allows other touch events (like camera control) to still work
+      e.preventDefault();
+    }
   }, [active, origin, onMove]);
 
-  const handleEnd = useCallback(() => {
+  const handleEnd = useCallback((e: TouchEvent | MouseEvent) => {
+    // For touch events, check if our specific touch ended
+    if ('changedTouches' in e) {
+      const touchEnded = Array.from(e.changedTouches).some(
+        touch => touch.identifier === touchIdRef.current
+      );
+      
+      // If it wasn't our touch, ignore
+      if (!touchEnded) return;
+      
+      // Reset touch ID
+      touchIdRef.current = null;
+    }
+    
     setActive(false);
     onStop();
   }, [onStop]);
 
   useEffect(() => {
-    if (isMobile) {
-      document.addEventListener('touchmove', handleMove, { passive: false });
-      document.addEventListener('touchend', handleEnd);
-      document.addEventListener('touchcancel', handleEnd);
+    // Only add event listeners if we're on mobile and the component is mounted
+    if (isMobile && joystickRef.current) {
+      const joystickElement = joystickRef.current;
+      
+      // Add touch event listeners directly to joystick element
+      joystickElement.addEventListener('touchmove', handleMove, { passive: false });
+      joystickElement.addEventListener('touchend', handleEnd);
+      joystickElement.addEventListener('touchcancel', handleEnd);
+      
       return () => {
-        document.removeEventListener('touchmove', handleMove);
-        document.removeEventListener('touchend', handleEnd);
-        document.removeEventListener('touchcancel', handleEnd);
+        joystickElement.removeEventListener('touchmove', handleMove);
+        joystickElement.removeEventListener('touchend', handleEnd);
+        joystickElement.removeEventListener('touchcancel', handleEnd);
       };
-    } else {
+    } else if (!isMobile) {
+      // For non-mobile, we need document-wide listeners for mouse
       document.addEventListener('mousemove', handleMove);
       document.addEventListener('mouseup', handleEnd);
       return () => {
@@ -105,18 +147,24 @@ const Joystick: React.FC<JoystickProps> = ({ onMove, onStop }) => {
         document.removeEventListener('mouseup', handleEnd);
       };
     }
-  }, [isMobile, handleMove, handleEnd]);
+    
+    // Return empty cleanup if no listeners were added
+    return () => {};
+  }, [isMobile, handleMove, handleEnd, joystickRef]);
 
   if (!isMobile) return null;
 
   const knobStyle = {
     transform: active
-      ? `translate(${Math.min(Math.max(position.x - origin.x, -50), 50)}px, ${Math.min(Math.max(position.y - origin.y, -50), 50)}px)`
+      ? `translate(${Math.min(Math.max(position.x - origin.x, -60), 60)}px, ${Math.min(Math.max(position.y - origin.y, -60), 60)}px)`
       : 'translate(0, 0)',
   };
 
   return (
-    <div className="joystick-container">
+    <div 
+      className="joystick-container"
+      ref={joystickRef}
+    >
       <div 
         className="joystick-base"
         onTouchStart={handleStart}
