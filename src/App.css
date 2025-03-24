@@ -115,4 +115,35 @@ canvas {
 
 .links a:hover {
   color: #7cb9ff;
+}
+
+/* Mobile Joystick Styles */
+.joystick-container {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 1000;
+  touch-action: none;
+}
+
+.joystick-base {
+  width: 100px;
+  height: 100px;
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 50%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.joystick-knob {
+  width: 40px;
+  height: 40px;
+  background-color: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  position: absolute;
+  transition: transform 0.1s ease-out;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
 } 
