@@ -34,7 +34,7 @@ function InfoPanel() {
         <h1>Calvin Xiang</h1>
         <p className="bio">
           I'm 20 years old and I'm a student at Waterloo. I'm interested in software development and machine learning.
-          I'm looking for a software engineering internship for Winter 2025. As you can see I also like to play hockey.
+          I'm looking for a software engineering internship for Winter 2026. As you can see I also like to play hockey.
         </p>
         <div className="controls">
           <h2>Controls</h2>
