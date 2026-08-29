@@ -1,6 +1,6 @@
 import { Suspense, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { ContactShadows, OrbitControls, RoundedBox } from '@react-three/drei'
+import { ContactShadows, OrbitControls, RoundedBox, useTexture } from '@react-three/drei'
 import { FaFilePdf, FaGithub, FaLinkedinIn } from 'react-icons/fa'
 import * as THREE from 'three'
 import Joystick from './components/Joystick'
@@ -43,6 +43,31 @@ function PortfolioCard() {
           I'm a 21-year-old Waterloo student interested in software development and machine learning.
           I'm looking for full-time roles starting <strong>Fall 2026</strong> or <strong>Winter 2027</strong>.
         </p>
+
+        <section className="experience" aria-labelledby="experience-title">
+          <div className="experience-heading">
+            <h2 id="experience-title">Recent experience</h2>
+            <span>AI agents · infrastructure</span>
+          </div>
+          <div className="experience-grid">
+            <a href="https://www.safetykit.com/" target="_blank" rel="noreferrer">
+              <img src="./safetykit-logo.svg" alt="" />
+              <span className="experience-copy">
+                <strong>SafetyKit</strong>
+                <small>Technical Staff · 2026</small>
+              </span>
+              <span className="experience-link" aria-hidden="true">↗</span>
+            </a>
+            <a href="https://ridges.ai/" target="_blank" rel="noreferrer">
+              <img src="./ridges-logo.png" alt="" />
+              <span className="experience-copy">
+                <strong>Ridges AI</strong>
+                <small>Founding SWE · 2025</small>
+              </span>
+              <span className="experience-link" aria-hidden="true">↗</span>
+            </a>
+          </div>
+        </section>
 
         <div className="card-actions">
           <a className="primary-action" href="./Calvin-Xiang-Resume.pdf" target="_blank" rel="noreferrer">
@@ -197,6 +222,46 @@ function FaceoffCircle({ position, center = false }: { position: [number, number
   )
 }
 
+function BoardSponsor({
+  logo,
+  position,
+  rotation,
+}: {
+  logo: string
+  position: [number, number, number]
+  rotation: number
+}) {
+  const texture = useTexture(logo)
+
+  useEffect(() => {
+    texture.colorSpace = THREE.SRGBColorSpace
+    texture.needsUpdate = true
+  }, [texture])
+
+  return (
+    <group position={position} rotation={[0, rotation, 0]}>
+      <RoundedBox args={[2.05, 0.72, 0.035]} radius={0.06} smoothness={3}>
+        <meshStandardMaterial color="#f8fbfc" roughness={0.68} />
+      </RoundedBox>
+      <mesh position={[0, 0, 0.024]}>
+        <planeGeometry args={[0.55, 0.55]} />
+        <meshBasicMaterial map={texture} side={THREE.DoubleSide} toneMapped={false} />
+      </mesh>
+    </group>
+  )
+}
+
+function RinkSponsors() {
+  return (
+    <group>
+      <BoardSponsor logo="./safetykit-logo.svg" position={[9.35, 0.78, -4.25]} rotation={Math.PI / 2} />
+      <BoardSponsor logo="./ridges-logo.png" position={[9.35, 0.78, 4.25]} rotation={Math.PI / 2} />
+      <BoardSponsor logo="./ridges-logo.png" position={[-9.35, 0.78, -4.25]} rotation={-Math.PI / 2} />
+      <BoardSponsor logo="./safetykit-logo.svg" position={[-9.35, 0.78, 4.25]} rotation={-Math.PI / 2} />
+    </group>
+  )
+}
+
 function Goal({ z, rotation = 0 }: { z: number, rotation?: number }) {
   return (
     <group position={[0, 0.19, z]} rotation={[0, rotation, 0]}>
@@ -246,6 +311,7 @@ function HockeyRink() {
         <mesh position={[-9.34, 0.78, 0]}><boxGeometry args={[0.04, 0.23, 31.8]} /><meshStandardMaterial color="#1d5c9b" /></mesh>
         <mesh position={[9.34, 0.78, 0]}><boxGeometry args={[0.04, 0.23, 31.8]} /><meshStandardMaterial color="#1d5c9b" /></mesh>
       </group>
+      <RinkSponsors />
     </group>
   )
 }
