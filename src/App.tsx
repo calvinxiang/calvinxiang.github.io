@@ -318,12 +318,25 @@ function HockeyRink() {
 
 function PenguinPlayer() {
   const group = useRef<THREE.Group>(null)
-  const body = useRef<THREE.Group>(null)
+  const skater = useRef<THREE.Group>(null)
+  const leftFoot = useRef<THREE.Group>(null)
+  const rightFoot = useRef<THREE.Group>(null)
+  const leftFlipper = useRef<THREE.Group>(null)
+  const rightFlipper = useRef<THREE.Group>(null)
+  const stick = useRef<THREE.Group>(null)
   const keys = useRef(new Set<string>())
-  const facing = useRef(Math.PI)
-  const walkTime = useRef(0)
+  const facing = useRef(0)
+  const strideTime = useRef(0)
+  const motionBlend = useRef(0)
+  const movementVelocity = useRef(new THREE.Vector3())
   const { camera } = useThree()
   const joystick = useContext(MobileControlContext)
+  const jerseyLogo = useTexture('./maple_leafs_logo.png')
+
+  useEffect(() => {
+    jerseyLogo.colorSpace = THREE.SRGBColorSpace
+    jerseyLogo.needsUpdate = true
+  }, [jerseyLogo])
 
   useEffect(() => {
     const onDown = (event: KeyboardEvent) => keys.current.add(event.key.toLowerCase())
@@ -336,8 +349,9 @@ function PenguinPlayer() {
     }
   }, [])
 
-  useFrame((_, delta) => {
+  useFrame((_, frameDelta) => {
     if (!group.current) return
+    const delta = Math.min(frameDelta, 0.05)
     const move = new THREE.Vector3()
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
     forward.y = 0
@@ -353,44 +367,164 @@ function PenguinPlayer() {
       move.addScaledVector(forward, -joystick.joystickY)
     }
 
-    if (move.lengthSq() > 0.01) {
+    const hasInput = move.lengthSq() > 0.01
+    const inputStrength = Math.min(move.length(), 1)
+    if (hasInput) {
       move.normalize()
-      group.current.position.addScaledVector(move, delta * 7)
-      group.current.position.x = THREE.MathUtils.clamp(group.current.position.x, -8.15, 8.15)
-      group.current.position.z = THREE.MathUtils.clamp(group.current.position.z, -15.1, 15.1)
-      const target = Math.atan2(move.x, move.z)
+    }
+
+    const targetVelocity = hasInput ? move.multiplyScalar(7 * inputStrength) : move.set(0, 0, 0)
+    const responsiveness = hasInput ? 11 : 7
+    movementVelocity.current.lerp(targetVelocity, 1 - Math.exp(-responsiveness * delta))
+    if (!hasInput && movementVelocity.current.lengthSq() < 0.0025) movementVelocity.current.set(0, 0, 0)
+
+    group.current.position.addScaledVector(movementVelocity.current, delta)
+    const clampedX = THREE.MathUtils.clamp(group.current.position.x, -8.15, 8.15)
+    const clampedZ = THREE.MathUtils.clamp(group.current.position.z, -15.1, 15.1)
+    if (clampedX !== group.current.position.x) movementVelocity.current.x = 0
+    if (clampedZ !== group.current.position.z) movementVelocity.current.z = 0
+    group.current.position.set(clampedX, group.current.position.y, clampedZ)
+
+    const speed = movementVelocity.current.length()
+    const skating = speed > 0.12
+    if (skating) {
+      const target = Math.atan2(movementVelocity.current.x, movementVelocity.current.z)
       let difference = target - facing.current
       difference = Math.atan2(Math.sin(difference), Math.cos(difference))
-      facing.current += difference * Math.min(delta * 8, 1)
+      facing.current += difference * (1 - Math.exp(-10 * delta))
       group.current.rotation.y = facing.current
-      walkTime.current += delta * 9
-      if (body.current) {
-        body.current.position.y = Math.abs(Math.sin(walkTime.current)) * 0.09
-        body.current.rotation.z = Math.sin(walkTime.current) * 0.055
-      }
-    } else if (body.current) {
-      body.current.position.y = THREE.MathUtils.lerp(body.current.position.y, 0, delta * 7)
-      body.current.rotation.z = THREE.MathUtils.lerp(body.current.rotation.z, 0, delta * 7)
     }
+
+    const targetBlend = THREE.MathUtils.clamp(speed / 5.5, 0, 1)
+    motionBlend.current = THREE.MathUtils.lerp(motionBlend.current, targetBlend, 1 - Math.exp(-9 * delta))
+    const blend = motionBlend.current
+    strideTime.current += delta * (5.5 + speed * 0.85)
+    const stride = Math.sin(strideTime.current)
+    const counterStride = Math.sin(strideTime.current + Math.PI)
+
+    if (skater.current) {
+      skater.current.position.y = 0.025 + Math.abs(Math.sin(strideTime.current * 2)) * 0.035 * blend
+      skater.current.rotation.x = THREE.MathUtils.lerp(skater.current.rotation.x, -0.1 * blend, 1 - Math.exp(-8 * delta))
+      skater.current.rotation.z = stride * 0.035 * blend
+    }
+    if (leftFoot.current && rightFoot.current) {
+      leftFoot.current.position.x = -0.22 - Math.max(0, stride) * 0.06 * blend
+      rightFoot.current.position.x = 0.22 + Math.max(0, counterStride) * 0.06 * blend
+      leftFoot.current.position.z = 0.11 + stride * 0.18 * blend
+      rightFoot.current.position.z = 0.11 + counterStride * 0.18 * blend
+      leftFoot.current.rotation.y = 0.12 + stride * 0.18 * blend
+      rightFoot.current.rotation.y = -0.12 + counterStride * 0.18 * blend
+    }
+    if (leftFlipper.current && rightFlipper.current) {
+      leftFlipper.current.rotation.z = 0.56 - stride * 0.14 * blend
+      rightFlipper.current.rotation.z = 0.56 + stride * 0.1 * blend
+      leftFlipper.current.rotation.x = counterStride * 0.1 * blend
+      rightFlipper.current.rotation.x = stride * 0.1 * blend
+    }
+    if (stick.current) stick.current.rotation.x = -0.05 + stride * 0.045 * blend
+
     playerWorldPosition.copy(group.current.position)
   })
 
   return (
-    <group ref={group} position={[0, 0.42, 4]}>
-      <group ref={body}>
-        <mesh position={[0, 0.75, 0]} castShadow><sphereGeometry args={[0.65, 24, 24]} /><meshStandardMaterial color="#16252e" roughness={0.7} /></mesh>
-        <mesh position={[0, 0.75, 0.49]} scale={[0.7, 0.86, 0.2]}><sphereGeometry args={[0.62, 24, 24]} /><meshStandardMaterial color="#f3f7f4" roughness={0.75} /></mesh>
-        <mesh position={[0, 1.42, 0]} castShadow><sphereGeometry args={[0.5, 24, 24]} /><meshStandardMaterial color="#16252e" roughness={0.68} /></mesh>
-        <mesh position={[-0.18, 1.5, 0.43]}><sphereGeometry args={[0.075, 16, 16]} /><meshStandardMaterial color="#eef6f5" /></mesh>
-        <mesh position={[0.18, 1.5, 0.43]}><sphereGeometry args={[0.075, 16, 16]} /><meshStandardMaterial color="#eef6f5" /></mesh>
-        <mesh position={[-0.18, 1.5, 0.495]}><sphereGeometry args={[0.035, 12, 12]} /><meshStandardMaterial color="#17212a" /></mesh>
-        <mesh position={[0.18, 1.5, 0.495]}><sphereGeometry args={[0.035, 12, 12]} /><meshStandardMaterial color="#17212a" /></mesh>
-        <mesh position={[0, 1.34, 0.55]} rotation={[Math.PI / 2, 0, 0]}><coneGeometry args={[0.11, 0.32, 4]} /><meshStandardMaterial color="#f3a33c" /></mesh>
-        <mesh position={[-0.55, 0.86, 0]} rotation={[0.1, 0, 0.45]} castShadow><capsuleGeometry args={[0.13, 0.55, 6, 12]} /><meshStandardMaterial color="#16252e" /></mesh>
-        <mesh position={[0.55, 0.86, 0]} rotation={[-0.1, 0, -0.45]} castShadow><capsuleGeometry args={[0.13, 0.55, 6, 12]} /><meshStandardMaterial color="#16252e" /></mesh>
-        <mesh position={[0, 1.12, 0]}><torusGeometry args={[0.52, 0.105, 10, 32]} /><meshStandardMaterial color="#2f70b7" roughness={0.62} /></mesh>
-        <mesh position={[-0.25, 0.07, 0.2]} scale={[1.5, 0.3, 2]}><sphereGeometry args={[0.18, 16, 16]} /><meshStandardMaterial color="#f3a33c" /></mesh>
-        <mesh position={[0.25, 0.07, 0.2]} scale={[1.5, 0.3, 2]}><sphereGeometry args={[0.18, 16, 16]} /><meshStandardMaterial color="#f3a33c" /></mesh>
+    <group ref={group} position={[0, 0.45, 4]}>
+      <group ref={skater}>
+        <mesh position={[0, 0.82, -0.02]} scale={[0.94, 0.9, 0.9]} castShadow>
+          <capsuleGeometry args={[0.49, 0.44, 10, 24]} />
+          <meshStandardMaterial color="#2564a3" roughness={0.62} />
+        </mesh>
+        <mesh position={[0, 1.28, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.39, 0.05, 10, 32]} />
+          <meshStandardMaterial color="#f6f8f6" roughness={0.58} />
+        </mesh>
+        <mesh position={[0, 0.48, 0]}>
+          <cylinderGeometry args={[0.47, 0.47, 0.1, 24]} />
+          <meshStandardMaterial color="#f6f8f6" roughness={0.58} />
+        </mesh>
+        <mesh position={[0, 0.88, 0.485]}>
+          <planeGeometry args={[0.45, 0.255]} />
+          <meshBasicMaterial map={jerseyLogo} toneMapped={false} />
+        </mesh>
+
+        <mesh position={[0, 1.68, 0]} castShadow>
+          <sphereGeometry args={[0.5, 30, 26]} />
+          <meshStandardMaterial color="#14242c" roughness={0.68} />
+        </mesh>
+        <mesh position={[0, 1.63, 0.44]} scale={[0.74, 0.65, 0.2]}>
+          <sphereGeometry args={[0.48, 24, 20]} />
+          <meshStandardMaterial color="#f4f7f4" roughness={0.76} />
+        </mesh>
+        <mesh position={[-0.145, 1.7, 0.525]}><sphereGeometry args={[0.045, 16, 16]} /><meshStandardMaterial color="#10191f" /></mesh>
+        <mesh position={[0.145, 1.7, 0.525]}><sphereGeometry args={[0.045, 16, 16]} /><meshStandardMaterial color="#10191f" /></mesh>
+        <mesh position={[-0.13, 1.715, 0.562]}><sphereGeometry args={[0.012, 8, 8]} /><meshBasicMaterial color="#ffffff" /></mesh>
+        <mesh position={[0.16, 1.715, 0.562]}><sphereGeometry args={[0.012, 8, 8]} /><meshBasicMaterial color="#ffffff" /></mesh>
+        <mesh position={[0, 1.54, 0.555]} rotation={[Math.PI / 2, 0, 0]}>
+          <coneGeometry args={[0.115, 0.3, 4]} />
+          <meshStandardMaterial color="#f3a33c" roughness={0.62} />
+        </mesh>
+
+        <mesh position={[0, 1.7, 0]} castShadow>
+          <sphereGeometry args={[0.53, 26, 18, 0, Math.PI * 2, 0, Math.PI / 2]} />
+          <meshStandardMaterial color="#205b96" roughness={0.5} />
+        </mesh>
+        <RoundedBox args={[0.68, 0.07, 0.17]} radius={0.025} smoothness={2} position={[0, 1.91, 0.45]}>
+          <meshStandardMaterial color="#174a7d" roughness={0.48} />
+        </RoundedBox>
+        <RoundedBox args={[0.085, 0.29, 0.025]} radius={0.018} smoothness={2} position={[0, 2.02, 0.43]}>
+          <meshStandardMaterial color="#f5f7f5" roughness={0.54} />
+        </RoundedBox>
+
+        <group ref={leftFlipper} position={[-0.5, 1.05, 0]} rotation={[0, 0, 0.56]}>
+          <mesh position={[0, -0.13, 0]} castShadow>
+            <capsuleGeometry args={[0.13, 0.34, 6, 12]} />
+            <meshStandardMaterial color="#245f9d" roughness={0.66} />
+          </mesh>
+          <mesh position={[0, -0.38, 0.02]} scale={[0.7, 1.15, 0.55]}>
+            <sphereGeometry args={[0.15, 16, 12]} />
+            <meshStandardMaterial color="#14242c" roughness={0.74} />
+          </mesh>
+        </group>
+        <group ref={rightFlipper} position={[0.5, 1.05, 0.12]} rotation={[0, 0, 0.56]}>
+          <mesh position={[0, -0.13, 0]} castShadow>
+            <capsuleGeometry args={[0.13, 0.34, 6, 12]} />
+            <meshStandardMaterial color="#245f9d" roughness={0.66} />
+          </mesh>
+          <mesh position={[0, -0.38, 0.1]} scale={[0.7, 1.15, 0.55]}>
+            <sphereGeometry args={[0.15, 16, 12]} />
+            <meshStandardMaterial color="#14242c" roughness={0.74} />
+          </mesh>
+        </group>
+
+        <group ref={leftFoot} position={[-0.22, 0.11, 0.11]}>
+          <mesh position={[0, 0.035, 0.06]} scale={[1.18, 0.45, 1.45]} castShadow>
+            <sphereGeometry args={[0.17, 16, 12]} />
+            <meshStandardMaterial color="#f2a23b" roughness={0.7} />
+          </mesh>
+          <RoundedBox args={[0.28, 0.045, 0.38]} radius={0.015} smoothness={2} position={[0, -0.055, 0.035]}>
+            <meshStandardMaterial color="#26343a" metalness={0.28} roughness={0.48} />
+          </RoundedBox>
+        </group>
+        <group ref={rightFoot} position={[0.22, 0.11, 0.11]}>
+          <mesh position={[0, 0.035, 0.06]} scale={[1.18, 0.45, 1.45]} castShadow>
+            <sphereGeometry args={[0.17, 16, 12]} />
+            <meshStandardMaterial color="#f2a23b" roughness={0.7} />
+          </mesh>
+          <RoundedBox args={[0.28, 0.045, 0.38]} radius={0.015} smoothness={2} position={[0, -0.055, 0.035]}>
+            <meshStandardMaterial color="#26343a" metalness={0.28} roughness={0.48} />
+          </RoundedBox>
+        </group>
+
+        <group ref={stick} position={[0.7, 0.73, 0.22]} rotation={[-0.05, 0, 0]}>
+          <RoundedBox args={[0.055, 1.45, 0.055]} radius={0.012} smoothness={2} rotation={[0, 0, 0.18]} castShadow>
+            <meshStandardMaterial color="#26343a" metalness={0.18} roughness={0.55} />
+          </RoundedBox>
+          <RoundedBox args={[0.072, 0.22, 0.072]} radius={0.012} smoothness={2} position={[-0.105, 0.59, 0]} rotation={[0, 0, 0.18]}>
+            <meshStandardMaterial color="#eef2ed" roughness={0.82} />
+          </RoundedBox>
+          <RoundedBox args={[0.4, 0.075, 0.09]} radius={0.02} smoothness={2} position={[0.33, -0.71, 0]} rotation={[0, -0.08, 0.02]}>
+            <meshStandardMaterial color="#273238" roughness={0.7} />
+          </RoundedBox>
+        </group>
       </group>
     </group>
   )
@@ -400,9 +534,23 @@ function Puck() {
   const puck = useRef<THREE.Mesh>(null)
   const velocity = useRef(new THREE.Vector3())
   const lastPlayerPosition = useRef(playerWorldPosition.clone())
+  const resetTimer = useRef(0)
 
-  useFrame((_, delta) => {
+  useFrame((_, frameDelta) => {
     if (!puck.current) return
+    const delta = Math.min(frameDelta, 0.05)
+
+    if (resetTimer.current > 0) {
+      resetTimer.current -= delta
+      if (resetTimer.current <= 0) {
+        puck.current.position.set(0, 0.52, 0)
+        puck.current.visible = true
+        velocity.current.set(0, 0, 0)
+        lastPlayerPosition.current.copy(playerWorldPosition)
+      }
+      return
+    }
+
     const playerVelocity = playerWorldPosition.clone().sub(lastPlayerPosition.current).divideScalar(Math.max(delta, 0.001))
     lastPlayerPosition.current.copy(playerWorldPosition)
     const difference = puck.current.position.clone().sub(playerWorldPosition)
@@ -412,6 +560,16 @@ function Puck() {
     }
     velocity.current.multiplyScalar(Math.pow(0.35, delta))
     puck.current.position.addScaledVector(velocity.current, delta)
+
+    const crossedGoalLine = Math.abs(puck.current.position.z) > 14.2
+    const insideGoal = Math.abs(puck.current.position.x) < 1.16
+    if (crossedGoalLine && insideGoal) {
+      resetTimer.current = 0.7
+      puck.current.visible = false
+      velocity.current.set(0, 0, 0)
+      return
+    }
+
     if (Math.abs(puck.current.position.x) > 8.45) {
       puck.current.position.x = Math.sign(puck.current.position.x) * 8.45
       velocity.current.x *= -0.72
