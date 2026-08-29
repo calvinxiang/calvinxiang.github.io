@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32px" height="32px" viewBox="0 0 32 32" version="1.1" xmlns="http://www.w3.org/2000/svg">
+    <title>Hockey Favicon</title>
+    <g stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <!-- Hockey puck -->
+        <ellipse fill="#000000" cx="16" cy="20" rx="10" ry="5"></ellipse>
+        
+        <!-- Hockey stick -->
+        <path d="M8,8 L14,18 L18,16 L10,6 C10,6 8.5,6.5 8,8 Z" fill="#C19A6B" stroke="#8B4513" stroke-width="1"></path>
+        
+        <!-- Stick blade -->
+        <path d="M14,18 L18,16 L22,18 L18,21 Z" fill="#C19A6B" stroke="#8B4513" stroke-width="1"></path>
+    </g>
+</svg> 
